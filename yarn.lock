@@ -8421,6 +8421,7 @@ uuid@^9.0.0:
     tailwindcss-animate "^1.0.7"
     uuid "^10.0.0"
     vocalHirep-app "file:"
+    Vocalup-app "file:"
     yarn "^1.22.22"
     zod "^3.22.4"
 

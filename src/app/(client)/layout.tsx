@@ -13,7 +13,7 @@ import { usePathname } from "next/navigation";
 const inter = Inter({ subsets: ["latin"] });
 
 const metadata = {
-  title: "VocalUp",
+  title: "VocalHire",
   description: " AI-powered Interviews",
   openGraph: {
     title: "vocalHirep",

@@ -1,5 +1,5 @@
 {
-  "name": "Vocalup-app",
+  "name": "VocalHire-app",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -74,8 +74,8 @@
     "tailwind-scrollbar-hide": "^1.1.7",
     "tailwindcss-animate": "^1.0.7",
     "uuid": "^10.0.0",
+    "VocalHire-app": "file:",
     "vocalHirep-app": "file:",
-    "Vocalup-app": "file:",
     "yarn": "^1.22.22",
     "zod": "^3.22.4"
   },

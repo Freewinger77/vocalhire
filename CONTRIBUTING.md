@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for considering contributing to VocalUp!
+Thanks for considering contributing to VocalHire!
 
 ## Opening issues
 

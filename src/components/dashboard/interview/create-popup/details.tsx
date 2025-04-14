@@ -3,7 +3,7 @@ import axios from "axios";
 import { v4 as uuidv4 } from "uuid";
 import { useInterviewers } from "@/contexts/interviewers.context";
 import { InterviewBase, Question } from "@/types/interview";
-import { ChevronRight, ChevronLeft, Info } from "lucide-react";
+import { ChevronRight, ChevronLeft, Info, Phone, Globe } from "lucide-react";
 import Image from "next/image";
 import { CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -55,6 +55,7 @@ function DetailsPopup({
   );
   const [duration, setDuration] = useState(interviewData.time_duration);
   const [uploadedDocumentContext, setUploadedDocumentContext] = useState("");
+  const [interviewType, setInterviewType] = useState<'web' | 'phone'>('web');
 
   const slideLeft = (id: string, value: number) => {
     var slider = document.getElementById(`${id}`);
@@ -107,6 +108,7 @@ function DetailsPopup({
       time_duration: duration,
       description: generatedQuestionsResponse.description,
       is_anonymous: isAnonymous,
+      interview_type: interviewType,
     };
     setInterviewData(updatedInterviewData);
   };
@@ -124,6 +126,7 @@ function DetailsPopup({
       time_duration: String(duration),
       description: "",
       is_anonymous: isAnonymous,
+      interview_type: interviewType,
     };
     setInterviewData(updatedInterviewData);
   };
@@ -145,6 +148,27 @@ function DetailsPopup({
       <div className="text-center w-[38rem]">
         <h1 className="text-xl font-semibold">Create an Interview</h1>
         <div className="flex flex-col justify-center items-start mt-4 ml-10 mr-8">
+          <div className="flex flex-row justify-between items-center w-full mb-4">
+            <h3 className="text-sm font-medium">Interview Type:</h3>
+            <div className={`flex space-x-1 p-1 rounded-lg ${
+              interviewType === 'phone' ? 'bg-pink-400' : 'bg-indigo-600'
+            }`}>
+              <Button
+                className="h-8 px-3 text-sm"
+                variant={interviewType === 'web' ? 'default' : 'ghost'}
+                onClick={() => setInterviewType('web')}
+              >
+                <Globe className="h-4 w-4" />
+              </Button>
+              <Button
+                className="h-8 px-3 text-sm"
+                variant={interviewType === 'phone' ? 'default' : 'ghost'}
+                onClick={() => setInterviewType('phone')}
+              >
+                <Phone className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
           <div className="flex flex-row justify-center items-center">
             <h3 className="text-sm font-medium">Interview Name:</h3>
             <input

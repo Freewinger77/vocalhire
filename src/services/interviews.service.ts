@@ -79,7 +79,11 @@ const getAllRespondents = async (interviewId: string) => {
 const createInterview = async (payload: any) => {
   const { error, data } = await supabase
     .from("interview")
-    .insert({ ...payload });
+    .insert({ 
+      ...payload,
+      interview_type: payload.interview_type || 'web' // Default to web if not specified
+    });
+
   if (error) {
     console.log(error);
 

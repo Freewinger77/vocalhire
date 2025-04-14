@@ -189,6 +189,7 @@ function Interviews() {
                   name={item.name}
                   url={item.url ?? ""}
                   readableSlug={item.readable_slug}
+                  interviewType={item.interview_type || 'web'}
                 />
               ))}
             </>

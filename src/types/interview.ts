@@ -21,6 +21,8 @@ export interface InterviewBase {
   questions: Question[];
   description: string;
   response_count: bigint;
+  interview_type: 'web' | 'phone';
+  agent_id?: string;
 }
 
 export interface InterviewDetails {

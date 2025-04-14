@@ -5,7 +5,7 @@ import { Switch } from "@/components/ui/switch";
 import React, { useState, useEffect } from "react";
 import { useOrganization } from "@clerk/nextjs";
 import { useInterviews } from "@/contexts/interviews.context";
-import { Share2, Filter, Pencil, UserIcon, Eye, Palette } from "lucide-react";
+import { Share2, Filter, Pencil, UserIcon, Eye, Palette, Phone } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useRouter } from "next/navigation";
 import { ResponseService } from "@/services/responses.service";
@@ -21,6 +21,7 @@ import Modal from "@/components/dashboard/Modal";
 import { toast } from "sonner";
 import { ChromePicker } from "react-color";
 import SharePopup from "@/components/dashboard/interview/sharePopup";
+import LinkPhoneNumberModal from "@/components/interview/LinkPhoneNumberModal";
 import {
   Tooltip,
   TooltipTrigger,
@@ -36,6 +37,7 @@ import {
 } from "@/components/ui/select";
 import { CandidateStatus } from "@/lib/enum";
 import LoaderWithText from "@/components/loaders/loader-with-text/loaderWithText";
+import axios from "axios";
 
 interface Props {
   params: {
@@ -324,6 +326,156 @@ function InterviewHome({ params, searchParams }: Props) {
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
+            {interview?.interview_type === 'phone' && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <LinkPhoneNumberModal 
+                      interviewId={params.interviewId}
+                      agentId={interview?.agent_id || ''}
+                      interviewType={interview?.interview_type || 'web'}
+                      className="bg-transparent shadow-none text-xs text-pink-500 px-0 h-7 hover:scale-110 relative"
+                    />
+                  </TooltipTrigger>
+                  <TooltipContent
+                    className="bg-zinc-300"
+                    side="bottom"
+                    sideOffset={4}
+                  >
+                    <span className="text-black flex flex-row gap-4">
+                      Phone Number
+                    </span>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+            {interview?.interview_type === 'phone' && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      className="bg-transparent shadow-none text-xs text-green-500 px-0 h-7 hover:scale-110 relative"
+                      onClick={async () => {
+                        toast.info("Fetching phone call data...", {
+                          description: "This may take a moment to connect to Retell API"
+                        });
+                        
+                        // Track loading state
+                        const buttonEl = document.activeElement as HTMLButtonElement;
+                        if (buttonEl) {
+                          buttonEl.disabled = true;
+                          buttonEl.innerHTML = '<span class="animate-pulse">Fetching...</span>';
+                        }
+                        
+                        try {
+                          let agentId = interview?.agent_id;
+                          
+                          // If no agent_id in interview, try to find it from a linked phone number
+                          if (!agentId) {
+                            console.log("No agent_id in interview, checking linked phone...");
+                            
+                            try {
+                              // Find the phone number for this interview
+                              const phoneResponse = await axios.get("/api/phone-numbers");
+                              console.log("Phone numbers response:", phoneResponse.data);
+                              
+                              const linkedPhone = phoneResponse.data.phoneNumbers.find(
+                                (phone: any) => phone.interview_id === params.interviewId
+                              );
+                              
+                              if (linkedPhone && linkedPhone.agent_linked) {
+                                console.log("Found agent_id from linked phone:", linkedPhone.agent_linked);
+                                agentId = linkedPhone.agent_linked;
+                                
+                                // Update the interview with this agent_id for future use
+                                try {
+                                  const updateResponse = await axios.post(`/api/interviews/${params.interviewId}/update`, {
+                                    agent_id: agentId
+                                  });
+                                  console.log("Interview updated with agent_id:", updateResponse.data);
+                                } catch (updateError) {
+                                  console.error("Failed to update interview with agent_id:", updateError);
+                                }
+                              } else {
+                                toast.warning("No phone number linked with an agent ID");
+                                
+                                return;
+                              }
+                            } catch (phoneError) {
+                              console.error("Error finding linked phone:", phoneError);
+                              toast.error("Could not find a linked phone with agent ID");
+                              
+                              return;
+                            }
+                          }
+                          
+                          // Now proceed with the agent ID we have
+                          console.log("Fetching calls for agent ID:", agentId);
+                          
+                          toast.info("Querying Retell API for calls...");
+                          const agentCallsResponse = await axios.post("/api/phone-numbers/list-agent-calls", {
+                            agentId: agentId,
+                            interviewId: params.interviewId
+                          });
+                          
+                          console.log("Agent calls response:", agentCallsResponse.data);
+                          
+                          if (agentCallsResponse.data.success) {
+                            if (agentCallsResponse.data.newCalls > 0) {
+                              toast.success(
+                                `Found ${agentCallsResponse.data.newCalls} new call${agentCallsResponse.data.newCalls !== 1 ? 's' : ''}!`, 
+                                { description: `IDs: ${agentCallsResponse.data.callIds.join(', ')}` }
+                              );
+                              
+                              // Update responses with the new data
+                              setResponses(agentCallsResponse.data.responses);
+                            } else if (agentCallsResponse.data.totalCalls > 0) {
+                              toast.info(
+                                `No new calls found`, 
+                                { description: `Found ${agentCallsResponse.data.totalCalls} call(s) but they're already in the system.` }
+                              );
+                            } else {
+                              toast.info("No calls found for this agent", {
+                                description: "Try making a phone call to this number first"
+                              });
+                            }
+                            
+                            // Return early - no need to try the fallback method
+                            return;
+                          }
+                        } catch (error: any) {
+                          console.error("Error fetching calls:", error);
+                          // Log more detailed error information
+                          if (error.response) {
+                            console.error("Error response data:", error.response.data);
+                            console.error("Error response status:", error.response.status);
+                            console.error("Error response headers:", error.response.headers);
+                          }
+                          toast.error(`Error fetching calls: ${error.response?.data?.error || error.message}`);
+                        } finally {
+                          // Restore the button
+                          if (buttonEl) {
+                            buttonEl.disabled = false;
+                            buttonEl.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-phone"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>';
+                          }
+                        }
+                      }}
+                    >
+                      <Phone size={16} />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent
+                    className="bg-zinc-300"
+                    side="bottom"
+                    sideOffset={4}
+                  >
+                    <span className="text-black flex flex-row gap-4">
+                      Refresh Phone Calls
+                    </span>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>

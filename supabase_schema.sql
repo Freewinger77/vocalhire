@@ -54,7 +54,8 @@ CREATE TABLE interview (
     respondents TEXT[],
     question_count INTEGER,
     response_count INTEGER,
-    time_duration TEXT
+    time_duration TEXT,
+    interview_type TEXT CHECK (interview_type IN ('web', 'phone'))
 );
 
 CREATE TABLE response (

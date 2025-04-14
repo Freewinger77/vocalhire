@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { PlayCircleIcon, SpeechIcon } from "lucide-react";
+import { PlayCircleIcon, SpeechIcon, PhoneIcon } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 
 function SideMenu() {
@@ -34,6 +34,17 @@ function SideMenu() {
           >
             <SpeechIcon className="font-thin mr-2" />
             <p className="font-medium ">Interviewers</p>
+          </div>
+          <div
+            className={`flex flex-row p-3 rounded-md hover:bg-slate-200 cursor-pointer ${
+              pathname.endsWith("/phone-numbers")
+                ? "bg-indigo-200"
+                : "bg-slate-100"
+            }`}
+            onClick={() => router.push("/dashboard/phone-numbers")}
+          >
+            <PhoneIcon className="font-thin mr-2" />
+            <p className="font-medium ">Phone Numbers</p>
           </div>
         </div>
       </div>

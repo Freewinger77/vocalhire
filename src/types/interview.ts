@@ -37,6 +37,7 @@ export interface InterviewDetails {
   logo_url: string;
   respondents: string[];
   readable_slug: string;
+  show_feedback_form?: boolean;
 }
 
 export interface Interview extends InterviewBase, InterviewDetails {}

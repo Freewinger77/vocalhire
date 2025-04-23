@@ -10,8 +10,10 @@ import { ClientService } from "@/services/clients.service";
 import { ResponseService } from "@/services/responses.service";
 import { useInterviews } from "@/contexts/interviews.context";
 import Modal from "@/components/dashboard/Modal";
-import { Gem, Plus } from "lucide-react";
+import { ArrowRight, Building, Folder, Gem, Plus } from "lucide-react";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
 
 function Interviews() {
   const { interviews, interviewsLoading } = useInterviews();
@@ -21,6 +23,7 @@ function Interviews() {
   const [allowedResponsesCount, setAllowedResponsesCount] =
     useState<number>(10);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const router = useRouter();
 
   function InterviewsLoader() {
     return (
@@ -102,6 +105,29 @@ function Interviews() {
 
     fetchResponsesCount();
   }, [interviews, organization, currentPlan, allowedResponsesCount]);
+
+  // No organization empty state
+  if (!organization) {
+    return (
+      <main className="p-8 pt-0 ml-12 mr-auto rounded-md">
+        <div className="flex flex-col items-center justify-center h-[80vh] max-w-md mx-auto text-center">
+          <Folder className="h-20 w-20 text-gray-300 mb-6" />
+          <h2 className="text-3xl font-semibold tracking-tight text-gray-700 mb-4">
+            Create Your First Organisation
+          </h2>
+          <p className="text-gray-500 mb-8">
+            Add an organisation to start creating interviews across your website.
+          </p>
+          <Button 
+            className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-full h-14 w-14 flex items-center justify-center"
+            onClick={() => (document.querySelector('.cl-organizationSwitcherTrigger') as HTMLElement)?.click()}
+          >
+            <Plus size={24} />
+          </Button>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="p-8 pt-0 ml-12 mr-auto rounded-md">

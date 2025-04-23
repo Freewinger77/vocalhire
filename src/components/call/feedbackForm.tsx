@@ -11,7 +11,7 @@ enum SatisfactionLevel {
 
 interface FeedbackFormProps {
   onSubmit: (data: Omit<FeedbackData, "interview_id">) => void;
-  email: string;
+  email?: string;
 }
 
 export function FeedbackForm({ onSubmit, email }: FeedbackFormProps) {
@@ -25,7 +25,7 @@ export function FeedbackForm({ onSubmit, email }: FeedbackFormProps) {
       onSubmit({
         satisfaction: Object.values(SatisfactionLevel).indexOf(satisfaction),
         feedback,
-        email,
+        email: email ?? null,
       });
     }
   };

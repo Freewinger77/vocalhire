@@ -4,6 +4,12 @@ function SignUpPage() {
   return (
     <div className="flex items-center justify-center h-screen w-full bg-white absolute top-0 left-0 z-50">
       <div className="hidden md:block align-middle my-auto">
+        <h1 className="text-2xl font-bold text-center text-gray-800 mb-4">
+          Join Vocal<span className="text-indigo-600">Hire</span>
+        </h1>
+        <p className="text-sm text-center text-gray-600 mb-6">
+          After signing up, you&apos;ll need to create an organisation to start creating interviews.
+        </p>
         <SignUp forceRedirectUrl="/dashboard" />
       </div>
       <div className="block md:hidden px-3 h-[60%] my-auto">
@@ -21,4 +27,5 @@ function SignUpPage() {
     </div>
   );
 }
+
 export default SignUpPage;

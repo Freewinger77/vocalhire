@@ -1,7 +1,3 @@
-[![GitHub stars](https://img.shields.io/github/stars/vocalHire/vocalHire?style=social)](https://github.com/vocalHire/vocalHire/stargazers)
-![License](https://img.shields.io/github/license/vocalHire/vocalHire)
-[![Twitter Follow](https://img.shields.io/twitter/follow/SuveenE?style=social)](https://x.com/SuveenE)
-
 # vocalHire - AI-powered voice interviewer for hiring 💼
 
 vocalHire is an open source platform for companies to conduct AI powered hiring interviews with their candidates.
@@ -25,7 +21,6 @@ vocalHire is an open source platform for companies to conduct AI powered hiring 
 - **📊 Smart Analysis:** Get detailed insights and scores for each interview response, powered by advanced AI.
 - **📈 Comprehensive Dashboard:** Track all candidate performances and overall stats.
 
-Here's a [loom](https://www.loom.com/share/762fd7d12001490bbfdcf3fac37ff173?sid=9a5b2a5a-64df-4c4c-a0e7-fc9765691f81) of me explaining the app.
 
 ## Initial Setup
 
@@ -111,10 +106,6 @@ For a detailed guide on contributing, read the [CONTRIBUTING.md](CONTRIBUTING.md
 ## Show Your Support 🌟
 
 If you find vocalHire helpful, please consider giving us a star on GitHub! It helps us reach more developers and continue improving the project.
-
-## Contact
-
-If you have any questions or feedback, please feel free to reach out to us at [suveen.te1[at]gmail.com](mailto:suveen.te1@gmail.com).
 
 ## License
 

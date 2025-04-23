@@ -5,6 +5,8 @@ import {
   AlarmClockIcon,
   XCircleIcon,
   CheckCircleIcon,
+  MicIcon,
+  MicOffIcon,
 } from "lucide-react";
 import React, { useState, useEffect, useRef } from "react";
 import { Card, CardHeader, CardTitle } from "../ui/card";
@@ -81,6 +83,8 @@ function Call({ interview }: InterviewProps) {
     useState<string>("1");
   const [time, setTime] = useState(0);
   const [currentTimeDuration, setCurrentTimeDuration] = useState<string>("0");
+  const [isMuted, setIsMuted] = useState<boolean>(true);
+  const [isPushToTalkActive, setIsPushToTalkActive] = useState<boolean>(false);
 
   const lastUserResponseRef = useRef<HTMLDivElement | null>(null);
 
@@ -139,6 +143,8 @@ function Call({ interview }: InterviewProps) {
     webClient.on("call_started", () => {
       console.log("Call started");
       setIsCalling(true);
+      // Ensure microphone is muted by default
+      webClient.mute();
     });
 
     webClient.on("call_ended", () => {
@@ -274,6 +280,44 @@ function Call({ interview }: InterviewProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEnded]);
 
+  // Push-to-talk key handling
+  // useEffect(() => {
+  //   const handleKeyDown = (e: KeyboardEvent) => {
+  //     if (e.code === 'Space' && isStarted && !isEnded && isMuted) {
+  //       setIsPushToTalkActive(true);
+  //       webClient.unmute();
+  //     }
+  //   };
+
+  //   const handleKeyUp = (e: KeyboardEvent) => {
+  //     if (e.code === 'Space' && isStarted && !isEnded && isMuted) {
+  //       setIsPushToTalkActive(false);
+  //       webClient.mute();
+  //     }
+  //   };
+
+  //   if (isStarted && !isEnded) {
+  //     window.addEventListener('keydown', handleKeyDown);
+  //     window.addEventListener('keyup', handleKeyUp);
+  //   }
+
+  //   return () => {
+  //     window.removeEventListener('keydown', handleKeyDown);
+  //     window.removeEventListener('keyup', handleKeyUp);
+  //   };
+  // }, [isStarted, isEnded, isMuted]);
+
+  // Handle mute toggle
+  const toggleMute = () => {
+    const newMutedState = !isMuted;
+    setIsMuted(newMutedState);
+    if (newMutedState) {
+      webClient.mute();
+    } else {
+      webClient.unmute();
+    }
+  };
+
   return (
     <div className="flex justify-center items-center min-h-screen bg-gray-100">
       {isStarted && <TabSwitchWarning />}
@@ -339,7 +383,10 @@ function Call({ interview }: InterviewProps) {
                       {"\n"}Ensure your volume is up and grant microphone access
                       when prompted. Additionally, please make sure you are in a
                       quiet environment.
-                      {"\n\n"}Note: Tab switching will be recorded.
+                      {"\n\n"}Audio Controls: Your microphone will be muted by default. You can:
+                      {"\n"}• Click the &quot;Unmute&quot; button to speak freely
+                      {/* {"\n"}• Or hold the spacebar key for push-to-talk (only works when muted) */}
+                      {"\n\n"}Note: Tab switching or the use of LLM assistance (ChatGPT, etc.) will be recorded.
                     </p>
                   </div>
                   {!interview?.is_anonymous && (
@@ -456,6 +503,37 @@ function Call({ interview }: InterviewProps) {
                       }`}
                     />
                     <div className="font-semibold">You</div>
+                    
+                    {/* Add microphone controls */}
+                    <div className="mt-2 flex items-center gap-2">
+                      <Button 
+                        variant={isMuted ? "destructive" : "default"}
+                        className="flex items-center gap-1"
+                        style={{
+                          backgroundColor: isMuted ? "#ff4444" : interview.theme_color ?? "#4F46E5",
+                          color: isLightColor(interview.theme_color ?? "#4F46E5") ? "black" : "white",
+                        }}
+                        onClick={toggleMute}
+                      >
+                        {isMuted ? (
+                          <>
+                            <MicOffIcon className="h-4 w-4" />
+                            <span>Unmute</span>
+                          </>
+                        ) : (
+                          <>
+                            <MicIcon className="h-4 w-4" />
+                            <span>Mute</span>
+                          </>
+                        )}
+                      </Button>
+                      
+                      {isMuted && (
+                        <div className={`text-xs font-normal rounded-md px-2 py-1 ${isPushToTalkActive ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-600"}`}>
+                          {isPushToTalkActive ? "Speaking (Space)" : "Hold Space to speak"}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>

@@ -104,6 +104,10 @@ function Call({ interview }: InterviewProps) {
   >('idle');
   // --- End Mic Permission State ---
 
+  // --- Unmute Instruction State ---
+  const [showUnmuteInstruction, setShowUnmuteInstruction] = useState(false);
+  // --- End Unmute Instruction State ---
+
   const handleFeedbackSubmit = async (
     formData: Omit<FeedbackData, "interview_id">,
   ) => {
@@ -349,6 +353,8 @@ function Call({ interview }: InterviewProps) {
         });
         console.log("[startConversation] Retell call initiated. Setting isStarted = true");
         setIsStarted(true);
+        // Show the unmute instruction popup
+        setShowUnmuteInstruction(true);
 
       } else {
         console.error("[startConversation] Failed to register call - API response missing access token.");
@@ -963,6 +969,28 @@ function Call({ interview }: InterviewProps) {
           </div>
           <ArrowUpRightSquareIcon className="h-[1.5rem] w-[1.5rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0 text-indigo-500" />
         </a>
+
+        {/* --- Unmute Instruction Popup --- */}
+        <AlertDialog open={showUnmuteInstruction} onOpenChange={setShowUnmuteInstruction}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Microphone Muted</AlertDialogTitle>
+              <AlertDialogDescription>
+                Your microphone starts muted. Click the 
+                <span className="inline-flex items-center mx-1 p-0.5 rounded bg-gray-200">
+                  <MicOffIcon className="h-3 w-3 mr-0.5"/> Unmute
+                </span> 
+                button (or hold Spacebar) when you are ready to speak.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogAction onClick={() => setShowUnmuteInstruction(false)}>
+                Got it!
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+        {/* --- End Unmute Instruction Popup --- */}
       </div>
     </div>
   );

@@ -30,6 +30,7 @@ export async function GET(res: NextRequest) {
       response_engine: { llm_id: newModel.llm_id, type: "retell-llm" },
       responsiveness: 0.63,
       voice_id: "11labs-Chloe",
+      enable_backchannel: false,
       agent_name: "Lisa",
     });
 
@@ -43,6 +44,7 @@ export async function GET(res: NextRequest) {
       response_engine: { llm_id: newModel.llm_id, type: "retell-llm" },
       responsiveness: 0.63,
       voice_id: "11labs-Brian",
+      enable_backchannel: false,
       agent_name: "Bob",
     });
 

@@ -10,6 +10,9 @@ import {
   ClockIcon,
   InfoIcon,
   CheckIcon,
+  MicOff,
+  Mic,
+  PhoneOff,
 } from "lucide-react";
 import React, { useState, useEffect, useRef } from "react";
 import { Card, CardHeader, CardTitle } from "../ui/card";
@@ -42,6 +45,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { InterviewerService } from "@/services/interviewers.service";
+import { cn } from "@/lib/utils";
 
 const webClient = new RetellWebClient();
 
@@ -264,11 +268,30 @@ function Call({ interview }: InterviewProps) {
     // isEnded will be set by the 'call_ended' listener
   };
 
+  // --- Quick Microphone Access Check ---
+  const checkMicrophoneAccess = async (): Promise<boolean> => {
+    console.log("Attempting quick microphone access check...");
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      stream.getTracks().forEach(track => track.stop()); // Stop immediately
+      console.log("Microphone access successful.");
+
+      return true; // Added newline before return
+    } catch (error) {
+      console.error("Quick microphone access check failed:", error);
+      toast.error("Could not access microphone. Please check connection and system settings.");
+
+      return false; // Added newline before return
+    }
+  };
+  // --- End Quick Check ---
+
   // --- Part 2: Execute the actual start logic (called after popup) ---
   const executeStartConversation = async () => {
     if (!startFunctionArgs) {
       console.error("executeStartConversation called without args");
-      return;
+
+      return; // Added newline before return
     }
     const { practiceMode } = startFunctionArgs;
     setStartFunctionArgs(null); // Clear args immediately
@@ -291,8 +314,8 @@ function Call({ interview }: InterviewProps) {
       if (isActuallyOldUser) {
         console.log("[startConversation] User already responded or not permitted.");
         setIsOldUser(true);
-        // No return needed here as loading state wasn't set yet
-        return; // Still need to stop execution
+
+        return; // Added newline before return
       }
       console.log("[startConversation] No existing response found.");
     }
@@ -363,22 +386,32 @@ function Call({ interview }: InterviewProps) {
   };
 
   // --- Part 1: Prepare to start (called by buttons) ---
-  const prepareToStartConversation = (practiceMode: boolean) => {
-    // 1. Check mic permission
+  const prepareToStartConversation = async (practiceMode: boolean) => {
     if (micPermissionStatus !== 'granted') {
-        toast.error("Please grant microphone permission first.");
-        requestMicPermission(); // Prompt again if needed
-        return;
+      toast.error("Please grant microphone permission first.");
+      requestMicPermission();
+
+      return; // Added newline before return
     }
+
+    // 1.5 Perform quick access check
+    const canAccessMic = await checkMicrophoneAccess();
+    if (!canAccessMic) {
+        // Error toast is shown within checkMicrophoneAccess
+        return; // Don't proceed if access failed
+    }
+
     // 2. Check email/name validation if required for the specific mode
      if (!practiceMode && !interview?.is_anonymous && (!isValidEmail || !name)) {
         toast.error("Please enter a valid email and your first name to start the interview.");
-        return;
+
+        return; // Added newline before return
      }
      // 3. Check if already started/loading (shouldn't happen if buttons disabled, but belt-and-suspenders)
      if (isStarted || isLoadingInterview || isLoadingPractice) {
         console.warn("Attempted to start conversation while already started or loading.");
-        return;
+
+        return; // Added newline before return
      }
 
     console.log(`Preparing to start conversation (practice: ${practiceMode})`);
@@ -451,7 +484,8 @@ function Call({ interview }: InterviewProps) {
       stream.getTracks().forEach(track => track.stop());
       setMicPermissionStatus('granted');
       console.log("Microphone permission granted by user.");
-      return true;
+
+      return true; // Added newline before return
     } catch (error) {
       console.error("Error requesting microphone permission:", error);
       setMicPermissionStatus('denied');
@@ -749,50 +783,40 @@ function Call({ interview }: InterviewProps) {
                     >
                       {lastUserResponse}
                     </div>
-                    {/* Image & Label & Controls */}
-                    <div className="flex flex-col items-center mt-auto sticky bottom-0 bg-white pb-2"> {/* Make sticky? */}
-                      <Image
-                        src={`/user-icon.png`}
-                        alt="Picture of the user"
-                        width={100}
-                        height={100}
-                        className={`object-cover object-center rounded-full mb-2 ${
-                          activeTurn === "user"
-                            ? `border-4 border-[${interview.theme_color}]`
-                            : "border-4 border-transparent"
-                        }`}
-                      />
-                      <div className="font-semibold text-sm mb-2">You</div>
-                       {/* Microphone Controls */}
-                       <div className="flex items-center gap-2">
-                         <Button
-                           variant={isMuted ? "outline" : "default"} // Use outline when muted
-                           size="sm" // Smaller button
-                           className={`flex items-center gap-1 rounded-full px-3 py-1 ${
-                             isMuted
-                               ? "border-red-500 text-red-500 hover:bg-red-50"
-                               : "" // Default/theme color applied below
-                           }`}
-                           style={!isMuted ? {
-                             backgroundColor: interview.theme_color ?? "#4F46E5",
-                             color: isLightColor(interview.theme_color ?? "#4F46E5") ? "black" : "white",
-                             borderColor: interview.theme_color ?? "#4F46E5" // Ensure border matches bg
-                           } : {}} // Empty style if muted (uses className)
-                           onClick={toggleMute}
-                         >
-                           {isMuted ? (
-                             <>
-                               <MicOffIcon className="h-4 w-4" />
-                               <span>Unmute</span>
-                             </>
-                           ) : (
-                             <>
-                               <MicIcon className="h-4 w-4" />
-                               <span>Mute</span>
-                             </>
-                           )}
-                         </Button>
-                       </div>
+                    {/* User Avatar & Mic Toggle */}
+                    <div className="flex flex-col items-center mt-auto sticky bottom-0 bg-white pb-2">
+                      <button
+                        onClick={toggleMute}
+                        className={cn(
+                          "rounded-full w-[100px] h-[100px] flex items-center justify-center transition-colors duration-200 ease-in-out",
+                          {
+                            // Avatar border based on active turn
+                            "border-4 border-transparent": activeTurn !== "user",
+                            [`border-4 border-[${interview.theme_color}]`]: activeTurn === "user",
+                            // Red background when muted
+                            "bg-red-500 hover:bg-red-600": isMuted,
+                            // Gray background when not muted and not active
+                            "bg-gray-600 hover:bg-gray-700": !isMuted && !(isStarted && !isEnded),
+                          }
+                        )}
+                        style={!isMuted && isStarted && !isEnded
+                          ? { backgroundColor: interview.theme_color ?? "#4F46E5" }
+                          : {}
+                        }
+                      >
+                        {isMuted ? (
+                          <MicOff
+                            size={48}
+                            className="text-white"
+                          />
+                        ) : (
+                          <Mic
+                            size={48}
+                            className={isLightColor(interview.theme_color ?? "#4F46E5") ? "text-black" : "text-white"}
+                          />
+                        )}
+                      </button>
+                      <div className="font-semibold text-sm mt-2">You</div>
                     </div>
                   </div>
                 </div> {/* End Transcript Area */}
@@ -941,7 +965,7 @@ function Call({ interview }: InterviewProps) {
                            setLastInterviewerResponse("");
                            setLastUserResponse("");
                            setCallId("");
-                           startConversation(false);
+                           prepareToStartConversation(false);
                        }}
                      >
                        {isLoadingInterview ? <MiniLoader/> : "Start Interview"}

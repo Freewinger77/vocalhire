@@ -108,6 +108,10 @@ function Call({ interview }: InterviewProps) {
   const [showUnmuteInstruction, setShowUnmuteInstruction] = useState(false);
   // --- End Unmute Instruction State ---
 
+  // --- State to hold args for delayed start ---
+  const [startFunctionArgs, setStartFunctionArgs] = useState<{ practiceMode: boolean } | null>(null);
+  // --- End State ---
+
   const handleFeedbackSubmit = async (
     formData: Omit<FeedbackData, "interview_id">,
   ) => {
@@ -260,25 +264,23 @@ function Call({ interview }: InterviewProps) {
     // isEnded will be set by the 'call_ended' listener
   };
 
-  // --- Start Conversation / Start Practice Handler ---
-  const startConversation = async (practiceMode = false) => {
-    console.log(`[startConversation] Called with practiceMode: ${practiceMode}`);
-    // Validate email/name only if not anonymous and not practicing
-    if (!interview?.is_anonymous && !practiceMode && (!isValidEmail || !name)) {
-       console.log("[startConversation] Validation failed: Email/Name required.");
-       toast.error("Please enter a valid email and your first name.");
-
-       return;
+  // --- Part 2: Execute the actual start logic (called after popup) ---
+  const executeStartConversation = async () => {
+    if (!startFunctionArgs) {
+      console.error("executeStartConversation called without args");
+      return;
     }
+    const { practiceMode } = startFunctionArgs;
+    setStartFunctionArgs(null); // Clear args immediately
 
-    // Use dummy data if practicing and anonymous
+    console.log(`Executing start conversation (practice: ${practiceMode})`);
+
+    // --- Start of original startConversation logic ---
     const userEmail = practiceMode && interview?.is_anonymous ? "practice@example.com" : email;
     const userName = practiceMode && interview?.is_anonymous ? "Practice User" : name;
-    console.log(`[startConversation] Using email: ${userEmail}, name: ${userName}`);
 
-    // Check for previous responses only if it's a real interview
     if (!practiceMode) {
-       console.log("[startConversation] Checking for existing responses...");
+      console.log("[startConversation] Checking for existing responses...");
       const oldUserEmails: string[] = (
         await ResponseService.getAllEmails(interview.id)
       ).map((item) => item.email);
@@ -289,30 +291,22 @@ function Call({ interview }: InterviewProps) {
       if (isActuallyOldUser) {
         console.log("[startConversation] User already responded or not permitted.");
         setIsOldUser(true);
-
-        return; // Don't proceed if already responded
+        // No return needed here as loading state wasn't set yet
+        return; // Still need to stop execution
       }
-       console.log("[startConversation] No existing response found.");
+      console.log("[startConversation] No existing response found.");
     }
 
-    // Prepare data for API
     const data = {
       mins: practiceMode ? "2" : interview?.time_duration,
       objective: interview?.objective,
       questions: interview?.questions.map((q) => q.question).join(", "),
       name: userName || "not provided",
     };
-    console.log("[startConversation] Prepared data for API:", data);
 
-    // Set the appropriate loading state
-    if (practiceMode) {
-      console.log("[startConversation] Setting isLoadingPractice = true");
-      setIsLoadingPractice(true);
-    } else {
-      console.log("[startConversation] Setting isLoadingInterview = true");
-      setIsLoadingInterview(true);
-    }
-    setIsPracticing(practiceMode); // Set practice mode state
+    // Set loading state
+    if (practiceMode) { setIsLoadingPractice(true); } else { setIsLoadingInterview(true); }
+    setIsPracticing(practiceMode);
 
     try {
       console.log("[startConversation] Calling /api/register-call...");
@@ -331,7 +325,6 @@ function Call({ interview }: InterviewProps) {
         console.log(`[startConversation] Got access token. Call ID: ${currentCallId}`);
         setCallId(currentCallId);
 
-        // Only create DB record if NOT practicing
         if (!practiceMode) {
           console.log("[startConversation] Creating DB record...");
           await createResponse({
@@ -346,35 +339,52 @@ function Call({ interview }: InterviewProps) {
            setPracticeTimeLeft(120);
         }
 
-        // Start Retell call
         console.log("[startConversation] Starting Retell web client call...");
         await webClient.startCall({
           accessToken: registerCallResponse.data.registerCallResponse.access_token,
         });
         console.log("[startConversation] Retell call initiated. Setting isStarted = true");
         setIsStarted(true);
-        // Show the unmute instruction popup
-        setShowUnmuteInstruction(true);
-
+        // NOTE: Do NOT set setShowUnmuteInstruction(true) here anymore
       } else {
         console.error("[startConversation] Failed to register call - API response missing access token.");
         toast.error("Could not initiate the call. Please try again.");
-        setIsPracticing(false);
+        setIsPracticing(false); // Reset practice state
       }
     } catch (error) {
         console.error("[startConversation] Error caught:", error);
         toast.error("An error occurred while starting the call.");
-        setIsPracticing(false);
+        setIsPracticing(false); // Reset practice state
     } finally {
-       // Reset the appropriate loading state
-       if (practiceMode) {
-         console.log("[startConversation] Finally block. Setting isLoadingPractice = false");
-         setIsLoadingPractice(false);
-       } else {
-         console.log("[startConversation] Finally block. Setting isLoadingInterview = false");
-         setIsLoadingInterview(false);
-       }
+        // Reset loading state
+        if (practiceMode) { setIsLoadingPractice(false); } else { setIsLoadingInterview(false); }
     }
+    // --- End of original startConversation logic ---
+  };
+
+  // --- Part 1: Prepare to start (called by buttons) ---
+  const prepareToStartConversation = (practiceMode: boolean) => {
+    // 1. Check mic permission
+    if (micPermissionStatus !== 'granted') {
+        toast.error("Please grant microphone permission first.");
+        requestMicPermission(); // Prompt again if needed
+        return;
+    }
+    // 2. Check email/name validation if required for the specific mode
+     if (!practiceMode && !interview?.is_anonymous && (!isValidEmail || !name)) {
+        toast.error("Please enter a valid email and your first name to start the interview.");
+        return;
+     }
+     // 3. Check if already started/loading (shouldn't happen if buttons disabled, but belt-and-suspenders)
+     if (isStarted || isLoadingInterview || isLoadingPractice) {
+        console.warn("Attempted to start conversation while already started or loading.");
+        return;
+     }
+
+    console.log(`Preparing to start conversation (practice: ${practiceMode})`);
+    // Set args and show instruction popup
+    setStartFunctionArgs({ practiceMode });
+    setShowUnmuteInstruction(true);
   };
 
   useEffect(() => {
@@ -479,21 +489,9 @@ function Call({ interview }: InterviewProps) {
   }, []); // Empty dependency array ensures this runs only once on mount
   // --- End Mic Permission Logic ---
 
-  // --- Remove Logging before return --- 
-  /*
-  console.log("[Render State Check]", {
-     micPermissionStatus,
-     isLoadingPractice,
-     isLoadingInterview,
-     is_anonymous: interview?.is_anonymous,
-     isValidEmail,
-     name,
-     isStarted,
-     isEnded,
-     isOldUser,
-  });
-  */
-  // --- End Logging ---
+  // --- Renamed: Original startConversation removed/refactored --- 
+
+  // ... other handlers and useEffects ...
 
   return (
     <div className="flex justify-center items-center min-h-screen bg-gray-100">
@@ -681,7 +679,7 @@ function Call({ interview }: InterviewProps) {
                          <AlertDialogCancel>Cancel</AlertDialogCancel>
                          <AlertDialogAction
                            className="bg-indigo-600 hover:bg-indigo-800 text-white"
-                           onClick={() => startConversation(false)}
+                           onClick={() => prepareToStartConversation(false)}
                          >
                            {isLoadingInterview ? <MiniLoader /> : null}
                            Continue to Interview
@@ -702,7 +700,7 @@ function Call({ interview }: InterviewProps) {
                       isLoadingPractice || isLoadingInterview ||
                       (!interview?.is_anonymous && (!isValidEmail || !name))
                     }
-                    onClick={() => startConversation(true)}
+                    onClick={() => prepareToStartConversation(true)}
                   >
                     {isLoadingPractice ? <MiniLoader /> : "Start Practice"}
                   </Button>
@@ -976,15 +974,21 @@ function Call({ interview }: InterviewProps) {
             <AlertDialogHeader>
               <AlertDialogTitle>Microphone Muted</AlertDialogTitle>
               <AlertDialogDescription>
-                Your microphone starts muted. Click the 
+                Your microphone starts muted. Click the
                 <span className="inline-flex items-center mx-1 p-0.5 rounded bg-gray-200">
                   <MicOffIcon className="h-3 w-3 mr-0.5"/> Unmute
-                </span> 
-                button (or hold Spacebar) when you are ready to speak.
+                </span>
+                button
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogAction onClick={() => setShowUnmuteInstruction(false)}>
+              {/* Call execute function on dismiss */}
+              <AlertDialogAction onClick={() => {
+                setShowUnmuteInstruction(false);
+                // Use a short delay to allow state update before execution?
+                // Or trust React batching? Let's try without delay first.
+                executeStartConversation();
+              }}>
                 Got it!
               </AlertDialogAction>
             </AlertDialogFooter>

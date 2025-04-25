@@ -529,7 +529,7 @@ function Call({ interview }: InterviewProps) {
 
   return (
     <div className="flex justify-center items-center min-h-screen bg-gray-100">
-      {isStarted && !isPracticing && <TabSwitchWarning />}
+      {isStarted && !isPracticing && !isEnded && <TabSwitchWarning />}
       <div className="bg-white rounded-md md:w-[80%] w-[90%]">
         <Card className="shadow rounded-lg border-2 border-b-4 border-r-4 border-black text-xl font-bold transition-all md:block dark:border-white">
           {/* --- Progress Bar (Real Interview Only) --- */}
@@ -786,16 +786,12 @@ function Call({ interview }: InterviewProps) {
                     {/* User Avatar & Mic Toggle */}
                     <div className="flex flex-col items-center mt-auto sticky bottom-0 bg-white pb-2">
                       <button
-                        onClick={toggleMute}
                         className={cn(
                           "rounded-full w-[100px] h-[100px] flex items-center justify-center transition-colors duration-200 ease-in-out",
                           {
-                            // Avatar border based on active turn
                             "border-4 border-transparent": activeTurn !== "user",
                             [`border-4 border-[${interview.theme_color}]`]: activeTurn === "user",
-                            // Red background when muted
                             "bg-red-500 hover:bg-red-600": isMuted,
-                            // Gray background when not muted and not active
                             "bg-gray-600 hover:bg-gray-700": !isMuted && !(isStarted && !isEnded),
                           }
                         )}
@@ -803,6 +799,7 @@ function Call({ interview }: InterviewProps) {
                           ? { backgroundColor: interview.theme_color ?? "#4F46E5" }
                           : {}
                         }
+                        onClick={toggleMute}
                       >
                         {isMuted ? (
                           <MicOff

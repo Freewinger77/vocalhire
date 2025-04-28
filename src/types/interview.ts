@@ -21,6 +21,8 @@ export interface InterviewBase {
   questions: Question[];
   description: string;
   response_count: bigint;
+  custom_metrics?: string[] | { [key: string]: any };
+  metric_weights?: { [key: string]: any };
 }
 
 export interface InterviewDetails {
@@ -38,4 +40,7 @@ export interface InterviewDetails {
   show_feedback_form?: boolean;
 }
 
-export interface Interview extends InterviewBase, InterviewDetails {}
+export interface Interview extends InterviewBase, InterviewDetails {
+  id: string;
+  is_archived?: boolean;
+}

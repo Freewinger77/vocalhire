@@ -3,7 +3,7 @@
 import { OpenAI } from "openai";
 import { ResponseService } from "@/services/responses.service";
 import { InterviewService } from "@/services/interviews.service";
-import { Question } from "@/types/interview";
+import { Question, Interview } from "@/types/interview";
 import { Analytics } from "@/types/response";
 import {
   getInterviewAnalyticsPrompt,
@@ -21,12 +21,17 @@ export const generateInterviewAnalytics = async (payload: {
     const response = await ResponseService.getResponseByCallId(callId);
     const interview = await InterviewService.getInterviewById(interviewId);
 
+    if (!interview) {
+      return { error: "Interview not found", status: 404 };
+    }
+
     if (response.analytics) {
       return { analytics: response.analytics as Analytics, status: 200 };
     }
 
     const interviewTranscript = transcript || response.details?.transcript;
     const questions = interview?.questions || [];
+    const customMetrics = interview?.custom_metrics as string[] | undefined;
     const mainInterviewQuestions = questions
       .map((q: Question, index: number) => `${index + 1}. ${q.question}`)
       .join("\n");
@@ -40,6 +45,7 @@ export const generateInterviewAnalytics = async (payload: {
     const prompt = getInterviewAnalyticsPrompt(
       interviewTranscript,
       mainInterviewQuestions,
+      customMetrics,
     );
 
     const baseCompletion = await openai.chat.completions.create({

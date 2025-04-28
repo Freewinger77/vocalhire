@@ -54,7 +54,9 @@ CREATE TABLE interview (
     respondents TEXT[],
     question_count INTEGER,
     response_count INTEGER,
-    time_duration TEXT
+    time_duration TEXT,
+    custom_metrics JSONB,
+    metric_weights JSONB
 );
 
 CREATE TABLE response (

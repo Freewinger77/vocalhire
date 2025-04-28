@@ -4,7 +4,20 @@ export const SYSTEM_PROMPT =
 export const getInterviewAnalyticsPrompt = (
   interviewTranscript: string,
   mainInterviewQuestions: string,
-) => `Analyse the following interview transcript and provide structured feedback:
+  customMetrics?: string[],
+) => {
+  let customMetricsPrompt = "";
+  let customMetricsJsonStructure = "";
+
+  if (customMetrics && customMetrics.length > 0) {
+    customMetrics.forEach((metric, index) => {
+      const metricKey = metric.toLowerCase().replace(/\\s+/g, '_');
+      customMetricsPrompt += `\n${index + 3}. ${metric}: Score (0-10) and Feedback (60 words). Evaluate based on the transcript.\n`;
+      customMetricsJsonStructure += `    "${metricKey}": { "score": number, "feedback": string },\n`;
+    });
+  }
+
+  return `Analyse the following interview transcript and provide structured feedback:
 
 ###
 Transcript: ${interviewTranscript}
@@ -27,6 +40,7 @@ Based on this transcript and the provided main interview questions, generate the
    - Listening Skills: Look for signs that the interviewee is actively listening and responding appropriately to follow-up questions.
    - Consistency: Evaluate if the interviewee's answers are consistent throughout the interview or if they contradict themselves.
    - Adaptability: Assess how well the interviewee adapts to different types of questions, including unexpected or challenging ones.
+${customMetrics ? '\n   - Custom Metrics: Evaluate based on the defined custom metrics below.' : ''}
 
 2. Communication Skills: Score (0-10) and Feedback (60 words). Rating system and guidleines for communication skills is as follwing.
     - 10: Fully operational command, use of English is appropriate, accurate, fluent, shows complete understanding.
@@ -39,7 +53,8 @@ Based on this transcript and the provided main interview questions, generate the
     - 03: Has great difficulty understanding spoken English.
     - 02: Has no ability to use the language except a few isolated words.
     - 01: Did not answer the questions.
-3. Summary for each main interview question: ${mainInterviewQuestions}
+${customMetricsPrompt}
+${customMetrics ? 3 + customMetrics.length : 3}. Summary for each main interview question: ${mainInterviewQuestions}
    - Use ONLY the main questions provided, it should output all the questions with the numbers even if it's not found in the transcript.
    - Follow the below rules when outputing the question and summary
       - If a main interview question isn't found in the transcript, then output the main question and give the summary as "Not Asked"
@@ -49,14 +64,15 @@ Based on this transcript and the provided main interview questions, generate the
             a) The candidate's response to the main question
             b) Any follow-up questions that were asked related to this main question and their answers
           - The summary should be a cohesive paragraph encompassing all related information for each main question
-4. Create a 10 to 15 words summary regarding the soft skills considering factors such as confidence, leadership, adaptability, critical thinking and decision making.
+${customMetrics ? 4 + customMetrics.length : 4}. Create a 10 to 15 words summary regarding the soft skills considering factors such as confidence, leadership, adaptability, critical thinking and decision making.
 Ensure the output is in valid JSON format with the following structure:
 {
   "overallScore": number,
   "overallFeedback": string,
   "communication": { "score": number, "feedback": string },
-  "questionSummaries": [{ "question": string, "summary": string }],
-  "softSkillSummary: string
+${customMetricsJsonStructure}  "questionSummaries": [{ "question": string, "summary": string }],
+  "softSkillSummary": string
 }
 
 IMPORTANT: Only use the main questions provided. Do not generate or infer additional questions such as follow-up questions.`;
+};

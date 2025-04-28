@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useOrganization } from "@clerk/nextjs";
 import { useInterviews } from "@/contexts/interviews.context";
 import { Share2, Filter, Pencil, UserIcon, Eye, Palette } from "lucide-react";
@@ -20,7 +20,6 @@ import EditInterview from "@/components/dashboard/interview/editInterview";
 import Modal from "@/components/dashboard/Modal";
 import { toast } from "sonner";
 import { ChromePicker } from "react-color";
-import SharePopup from "@/components/dashboard/interview/sharePopup";
 import {
   Tooltip,
   TooltipTrigger,
@@ -36,6 +35,9 @@ import {
 } from "@/components/ui/select";
 import { CandidateStatus } from "@/lib/enum";
 import LoaderWithText from "@/components/loaders/loader-with-text/loaderWithText";
+import { Slider } from "@/components/ui/slider";
+import { DataTable } from "@/components/dashboard/interview/dataTable";
+import SharePopup from "@/components/dashboard/interview/sharePopup";
 
 interface Props {
   params: {
@@ -66,39 +68,103 @@ function InterviewHome({ params, searchParams }: Props) {
   const [iconColor, seticonColor] = useState<string>("#4F46E5");
   const { organization } = useOrganization();
   const [filterStatus, setFilterStatus] = useState<string>("ALL");
+  const [metricWeights, setMetricWeights] = useState<{ [key: string]: number }>({});
+  const [isSavingWeights, setIsSavingWeights] = useState<boolean>(false);
 
-  const seeInterviewPreviewPage = () => {
-    const protocol = base_url?.includes("localhost") ? "http" : "https";
-    if (interview?.url) {
-      const url = interview?.readable_slug
-        ? `${protocol}://${base_url}/call/${interview?.readable_slug}`
-        : interview.url.startsWith("http")
-          ? interview.url
-          : `https://${interview.url}`;
-      window.open(url, "_blank");
-    } else {
-      console.error("Interview URL is null or undefined.");
+  const calculateWeightedScore = (response: Response, weights: { [key: string]: number }): number => {
+    if (!response.analytics || Object.keys(weights).length === 0) {
+      return response.analytics?.overallScore || 0;
     }
+
+    let totalWeightedScore = 0;
+    const analytics = response.analytics as any;
+
+    const communicationScore = analytics.communication?.score ?? 0;
+    const communicationWeight = weights["Communication"] ?? 0;
+    totalWeightedScore += (communicationScore * communicationWeight) / 10;
+
+    interview?.custom_metrics?.forEach((metricName: string) => {
+      const metricKey = metricName.toLowerCase().replace(/\s+/g, '_');
+      const metricScore = analytics[metricKey]?.score ?? 0;
+      const metricWeight = weights[metricName] ?? 0;
+      totalWeightedScore += (metricScore * metricWeight) / 10;
+    });
+
+    return Math.max(0, Math.min(100, Math.round(totalWeightedScore)));
+  };
+
+  const initializeWeights = (currentInterview: Interview) => {
+    const initialWeights: { [key: string]: number } = {};
+    let totalWeight = 0;
+
+    initialWeights["Communication"] = 100;
+
+    if (currentInterview.custom_metrics) {
+      (currentInterview.custom_metrics as string[]).forEach(metric => {
+        initialWeights[metric] = 0;
+      });
+    }
+
+    if (currentInterview.metric_weights) {
+       try {
+         const savedWeights = currentInterview.metric_weights as { [key: string]: number };
+         Object.keys(initialWeights).forEach(metric => {
+            if (savedWeights.hasOwnProperty(metric)) {
+                 initialWeights[metric] = savedWeights[metric];
+            }
+         });
+         totalWeight = Object.values(initialWeights).reduce((sum, w) => sum + w, 0);
+         if (totalWeight !== 100 && totalWeight > 0) {
+            const factor = 100 / totalWeight;
+            Object.keys(initialWeights).forEach(metric => {
+                initialWeights[metric] = Math.round(initialWeights[metric] * factor);
+            });
+            totalWeight = Object.values(initialWeights).reduce((sum, w) => sum + w, 0);
+             if (totalWeight !== 100) {
+                 const diff = 100 - totalWeight;
+                 const firstMetric = Object.keys(initialWeights)[0];
+                 initialWeights[firstMetric] += diff;
+             }
+         } else if (totalWeight === 0) {
+             initialWeights["Communication"] = 100;
+         }
+
+       } catch (e) {
+          console.error("Failed to parse saved metric weights", e);
+          initialWeights["Communication"] = 100;
+          if (currentInterview.custom_metrics) {
+            (currentInterview.custom_metrics as string[]).forEach(metric => {
+              initialWeights[metric] = 0;
+            });
+          }
+       }
+    }
+
+    setMetricWeights(initialWeights);
   };
 
   useEffect(() => {
     const fetchInterview = async () => {
       try {
+        setLoading(true);
         const response = await getInterviewById(params.interviewId);
         setInterview(response);
         setIsActive(response.is_active);
-        setIsViewed(response.is_viewed);
         setThemeColor(response.theme_color ?? "#4F46E5");
         seticonColor(response.theme_color ?? "#4F46E5");
-        setLoading(true);
+        if (response) {
+            initializeWeights(response);
+        }
       } catch (error) {
         console.error(error);
       } finally {
         setLoading(false);
       }
     };
-    if (!interview || !isGeneratingInsights) {
+    if (!interview || isGeneratingInsights) {
       fetchInterview();
+    } else if (interview && Object.keys(metricWeights).length === 0) {
+        initializeWeights(interview);
     }
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -138,6 +204,13 @@ function InterviewHome({ params, searchParams }: Props) {
     fetchResponses();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (interview) {
+        initializeWeights(interview);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+ }, [interview?.custom_metrics, interview?.metric_weights]);
 
   const handleDeleteResponse = (deletedCallId: string) => {
     if (responses) {
@@ -245,14 +318,125 @@ function InterviewHome({ params, searchParams }: Props) {
     if (!responses) {
       return [];
     }
-    if (filterStatus == "ALL") {
-      return responses;
+    const filtered = filterStatus === "ALL"
+        ? responses
+        : responses.filter(response => response.candidate_status === filterStatus);
+
+    return filtered;
+  };
+
+  const handleWeightChange = (metricName: string, value: number) => {
+    const newWeights = { ...metricWeights, [metricName]: value };
+
+    // Normalize weights to sum to 100
+    let currentTotal = Object.values(newWeights).reduce((sum, w) => sum + w, 0);
+
+    if (currentTotal > 100) {
+      // Reduce other weights proportionally
+      const overflow = currentTotal - 100;
+      const otherMetricsTotal = currentTotal - value;
+
+      if (otherMetricsTotal > 0) {
+           // Distribute the reduction among other metrics
+            Object.keys(newWeights).forEach(key => {
+                if (key !== metricName) {
+                     const proportion = newWeights[key] / otherMetricsTotal;
+                     newWeights[key] = Math.max(0, Math.round(newWeights[key] - overflow * proportion));
+                }
+            });
+            // Recalculate total after rounding and adjust if necessary
+            currentTotal = Object.values(newWeights).reduce((sum, w) => sum + w, 0);
+             const adjustment = 100 - currentTotal;
+             if (adjustment !== 0) {
+                 // Add/subtract adjustment to the changed metric if possible, else distribute
+                 if (newWeights[metricName] + adjustment >= 0) {
+                    newWeights[metricName] += adjustment;
+                 } else {
+                    // Fallback: apply adjustment to the first available metric
+                    const firstKey = Object.keys(newWeights).find(k => newWeights[k] > 0 && k !== metricName) || Object.keys(newWeights)[0];
+                    if (newWeights[firstKey] !== undefined) { // Check if key exists
+                       newWeights[firstKey] += adjustment;
+                    }
+                 }
+             }
+
+      } else {
+          // If only one metric has weight, cap it at 100
+          newWeights[metricName] = 100;
+      }
+
+    }
+     // Ensure the final sum is exactly 100 after all adjustments
+    currentTotal = Object.values(newWeights).reduce((sum, w) => sum + w, 0);
+    if (currentTotal !== 100 && Object.keys(newWeights).length > 0) {
+         const diff = 100 - currentTotal;
+         // Apply difference to the metric that was just changed if possible
+         if (newWeights[metricName] !== undefined) {
+            newWeights[metricName] = Math.max(0, newWeights[metricName] + diff);
+         } else {
+            // Fallback: apply to the first metric
+             const firstKey = Object.keys(newWeights)[0];
+             if (newWeights[firstKey] !== undefined) {
+                 newWeights[firstKey] = Math.max(0, newWeights[firstKey] + diff); // Ensure not negative
+             }
+         }
     }
 
-    return responses?.filter(
-      (response) => response?.candidate_status == filterStatus,
-    );
+
+    setMetricWeights(newWeights);
   };
+
+  const saveWeights = async () => {
+    if (!interview) {
+        return;
+    }
+    setIsSavingWeights(true);
+    try {
+      await InterviewService.updateInterview(
+        { metric_weights: metricWeights }, 
+        interview.id,
+      );
+      toast.success("Metric weights saved successfully!", {
+         position: "bottom-right",
+         duration: 3000,
+      });
+    } catch (error) {
+      console.error("Failed to save metric weights:", error);
+      toast.error("Error saving weights", {
+        description: "Failed to update metric weights.",
+        duration: 3000,
+      });
+    } finally {
+      setIsSavingWeights(false);
+    }
+  };
+
+  const seeInterviewPreviewPage = () => {
+    const protocol = base_url?.includes("localhost") ? "http" : "https";
+    if (interview?.url) {
+      const url = interview?.readable_slug
+        ? `${protocol}://${base_url}/call/${interview?.readable_slug}`
+        : interview.url.startsWith("http")
+          ? interview.url
+          : `https://${interview.url}`;
+      window.open(url, "_blank");
+    } else {
+      console.error("Interview URL is null or undefined.");
+    }
+  };
+
+  // Prepare data for DataTable
+  const tableData = useMemo(() => {
+     const filtered = filterResponses();
+     if (!Array.isArray(filtered)) {
+         return [];
+     }
+     
+     return filtered.map(response => ({
+         ...response,
+         weightedScore: calculateWeightedScore(response, metricWeights),
+     }));
+  }, [responses, metricWeights, filterStatus]);
 
   return (
     <div className="flex flex-col w-full h-full m-2 bg-white">
@@ -402,145 +586,45 @@ function InterviewHome({ params, searchParams }: Props) {
               )}
             </label>
           </div>
-          <div className="flex flex-row w-full p-2 h-[85%] gap-1 ">
-            <div className="w-[20%] flex flex-col p-2 divide-y-2 rounded-sm border-2 border-slate-100">
-              <div className="flex w-full justify-center py-2">
-                <Select
-                  onValueChange={async (newValue: string) => {
-                    setFilterStatus(newValue);
-                  }}
-                >
-                  <SelectTrigger className="w-[95%] bg-slate-100 rounded-lg">
-                    <Filter size={18} className=" text-slate-400" />
-                    <SelectValue placeholder="Filter By" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={CandidateStatus.NO_STATUS}>
-                      <div className="flex items-center">
-                        <div className="w-3 h-3 bg-gray-400 rounded-full mr-2" />
-                        No Status
-                      </div>
-                    </SelectItem>
-                    <SelectItem value={CandidateStatus.NOT_SELECTED}>
-                      <div className="flex items-center">
-                        <div className="w-3 h-3 bg-red-500 rounded-full mr-2" />
-                        Not Selected
-                      </div>
-                    </SelectItem>
-                    <SelectItem value={CandidateStatus.POTENTIAL}>
-                      <div className="flex items-center">
-                        <div className="w-3 h-3 bg-yellow-500 rounded-full mr-2" />
-                        Potential
-                      </div>
-                    </SelectItem>
-                    <SelectItem value={CandidateStatus.SELECTED}>
-                      <div className="flex items-center">
-                        <div className="w-3 h-3 bg-green-500 rounded-full mr-2" />
-                        Selected
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="ALL">
-                      <div className="flex items-center">
-                        <div className="w-3 h-3 border-2 border-gray-300 rounded-full mr-2" />
-                        All
-                      </div>
-                    </SelectItem>
-                  </SelectContent>
+          <div className="flex flex-1 overflow-hidden gap-4">
+            <div className="w-2/5 flex flex-col border rounded-lg overflow-hidden">
+              <div className="flex items-center justify-between p-3 border-b bg-muted/40">
+                <h2 className="text-lg font-semibold">Responses ({responses?.length || 0})</h2>
+                <Select value={filterStatus} onValueChange={setFilterStatus}>
+                   <SelectTrigger className="w-[180px]">
+                      <SelectValue placeholder="Filter by Status" />
+                   </SelectTrigger>
+                   <SelectContent>
+                      <SelectItem value="ALL">All Statuses</SelectItem>
+                      <SelectItem value={CandidateStatus.NO_STATUS}>No Status</SelectItem>
+                      <SelectItem value={CandidateStatus.NOT_SELECTED}>Rejected</SelectItem>
+                      <SelectItem value={CandidateStatus.POTENTIAL}>Potential</SelectItem>
+                      <SelectItem value={CandidateStatus.SELECTED}>Approved</SelectItem>
+                   </SelectContent>
                 </Select>
               </div>
-
-              <ScrollArea className="h-full p-1 rounded-md border-none">
-                {filterResponses().length > 0 ? (
-                  filterResponses().map((response) => (
-                    <div
-                      className={`p-2 rounded-md hover:bg-indigo-100 border-2 my-1 text-left text-xs ${
-                        searchParams.call == response.call_id
-                          ? "bg-indigo-200"
-                          : "border-indigo-100"
-                      } flex flex-row justify-between cursor-pointer w-full`}
-                      key={response?.id}
-                      onClick={() => {
-                        router.push(
-                          `/interviews/${params.interviewId}?call=${response.call_id}`,
-                        );
-                        handleResponseClick(response);
-                      }}
-                    >
-                      <div className="flex flex-row gap-1 items-center w-full">
-                        {response.candidate_status === "NOT_SELECTED" ? (
-                          <div className="w-[5%] h-full bg-red-500 rounded-sm" />
-                        ) : response.candidate_status === "POTENTIAL" ? (
-                          <div className="w-[5%] h-full bg-yellow-500 rounded-sm" />
-                        ) : response.candidate_status === "SELECTED" ? (
-                          <div className="w-[5%] h-full bg-green-500 rounded-sm" />
-                        ) : (
-                          <div className="w-[5%] h-full bg-gray-400 rounded-sm" />
-                        )}
-                        <div className="flex items-center justify-between w-full">
-                          <div className="flex flex-col my-auto">
-                            <p className="font-medium mb-[2px]">
-                              {response?.name
-                                ? `${response?.name}'s Response`
-                                : "Anonymous"}
-                            </p>
-                            <p className="">
-                              {formatTimestampToDateHHMM(
-                                String(response?.created_at),
-                              )}
-                            </p>
-                          </div>
-                          <div className="flex flex-col items-center justify-center ml-auto flex-shrink-0">
-                            {!response.is_viewed && (
-                              <div className="w-4 h-4 flex items-center justify-center mb-1">
-                                <div className="text-indigo-500 text-xl leading-none">
-                                  ●
-                                </div>
-                              </div>
-                            )}
-                            <div
-                              className={`w-6 h-6 flex items-center justify-center ${
-                                response.is_viewed ? "h-full" : ""
-                              }`}
-                            >
-                              {response.analytics &&
-                                response.analytics.overallScore !==
-                                  undefined && (
-                                  <TooltipProvider>
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <div className="w-6 h-6 rounded-full bg-white border-2 border-indigo-500 flex items-center justify-center">
-                                          <span className="text-indigo-500 text-xs font-semibold">
-                                            {response?.analytics?.overallScore}
-                                          </span>
-                                        </div>
-                                      </TooltipTrigger>
-                                      <TooltipContent
-                                        className="bg-gray-500"
-                                        side="bottom"
-                                        sideOffset={4}
-                                      >
-                                        <span className="text-white font-normal flex flex-row gap-4">
-                                          Overall Score
-                                        </span>
-                                      </TooltipContent>
-                                    </Tooltip>
-                                  </TooltipProvider>
-                                )}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))
+              <ScrollArea className="flex-1">
+                {loading ? (
+                  <div className="flex items-center justify-center h-full">
+                    <LoaderWithText />
+                  </div>
+                ) : tableData.length > 0 ? (
+                  <DataTable
+                    data={tableData}
+                    interviewId={params.interviewId}
+                    selectedCallId={searchParams.call}
+                    handleCandidateStatusChange={handleCandidateStatusChange}
+                    onRowClick={handleResponseClick}
+                  />
                 ) : (
-                  <p className="text-center text-gray-500">
-                    No responses to display
+                  <p className="p-4 text-center text-muted-foreground">
+                    No responses yet.
                   </p>
                 )}
               </ScrollArea>
             </div>
             {responses && (
-              <div className="w-[85%] rounded-md ">
+              <div className="w-3/5 border rounded-lg overflow-hidden flex flex-col">
                 {searchParams.call ? (
                   <CallInfo
                     call_id={searchParams.call}
@@ -588,6 +672,34 @@ function InterviewHome({ params, searchParams }: Props) {
           }
           onClose={closeSharePopup}
         />
+      )}
+      {interview && (interview.custom_metrics?.length ?? 0) > 0 && Object.keys(metricWeights).length > 0 && (
+          <div className="p-4 border rounded-lg bg-card text-card-foreground shadow-sm mt-4">
+              <h3 className="text-lg font-semibold mb-3">Adjust Metric Weights</h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                  Adjust the weightage of each metric to calculate the overall candidate score. Weights must sum to 100.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+                  {Object.keys(metricWeights).map((metricName) => (
+                      <div key={metricName}>
+                          <label className="block text-sm font-medium mb-1">{metricName} ({metricWeights[metricName]}%)</label>
+                          <Slider
+                              max={100}
+                              step={1}
+                              className="w-full"
+                              value={[metricWeights[metricName]]}
+                              onValueChange={(value) => handleWeightChange(metricName, value[0])}
+                          />
+                      </div>
+                  ))}
+              </div>
+               <Button disabled={isSavingWeights} onClick={saveWeights}>
+                  {isSavingWeights ? <LoaderWithText /> : "Save Weights"}
+               </Button>
+               <p className="text-xs text-muted-foreground mt-2">
+                   Total Weight: {Object.values(metricWeights).reduce((sum, w) => sum + w, 0)}%
+               </p>
+          </div>
       )}
     </div>
   );

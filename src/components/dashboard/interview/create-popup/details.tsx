@@ -48,6 +48,9 @@ function DetailsPopup({
   const [isAnonymous, setIsAnonymous] = useState<boolean>(
     interviewData.is_anonymous,
   );
+  const [customMetrics, setCustomMetrics] = useState<string[]>(
+    (interviewData.custom_metrics as string[]) || [],
+  );
   const [numQuestions, setNumQuestions] = useState(
     interviewData.question_count == 0
       ? ""
@@ -107,6 +110,7 @@ function DetailsPopup({
       time_duration: duration,
       description: generatedQuestionsResponse.description,
       is_anonymous: isAnonymous,
+      custom_metrics: customMetrics,
     };
     setInterviewData(updatedInterviewData);
   };
@@ -124,6 +128,7 @@ function DetailsPopup({
       time_duration: String(duration),
       description: "",
       is_anonymous: isAnonymous,
+      custom_metrics: customMetrics,
     };
     setInterviewData(updatedInterviewData);
   };
@@ -134,6 +139,7 @@ function DetailsPopup({
       setSelectedInterviewer(BigInt(0));
       setObjective("");
       setIsAnonymous(false);
+      setCustomMetrics([]);
       setNumQuestions("");
       setDuration("");
       setIsClicked(false);
@@ -255,6 +261,36 @@ function DetailsPopup({
               be collected.
             </span>
           </label>
+          <h3 className="text-sm font-medium mt-3">Custom Analysis Metrics (Optional):</h3>
+          <p className="text-xs text-gray-500 mb-1">Define additional metrics (e.g., Problem Solving, Technical Depth) for AI analysis besides Communication.</p>
+          <input
+            type="text"
+            className="border-b-2 focus:outline-none border-gray-500 px-2 w-[33.2rem] py-0.5 mt-1"
+            placeholder="Enter metric name and press Enter (e.g., Problem Solving)"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && e.currentTarget.value.trim()) {
+                const newMetric = e.currentTarget.value.trim();
+                if (!customMetrics.includes(newMetric)) {
+                  setCustomMetrics([...customMetrics, newMetric]);
+                }
+                e.currentTarget.value = '';
+                e.preventDefault();
+              }
+            }}
+          />
+          <div className="mt-1 flex flex-wrap gap-1 w-[33.2rem]">
+            {customMetrics.map((metric, index) => (
+              <span key={index} className="bg-indigo-100 text-indigo-700 text-xs font-medium px-2.5 py-0.5 rounded-full flex items-center">
+                {metric}
+                <button
+                  className="ml-1.5 text-indigo-500 hover:text-indigo-700"
+                  onClick={() => setCustomMetrics(customMetrics.filter((_, i) => i !== index))}
+                >
+                  &times;
+                </button>
+              </span>
+            ))}
+          </div>
           <div className="flex flex-row gap-3 justify-between w-full mt-3">
             <div className="flex flex-row justify-center items-center ">
               <h3 className="text-sm font-medium ">Number of Questions:</h3>

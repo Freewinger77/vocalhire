@@ -23,42 +23,32 @@ import {
   TooltipContent,
   TooltipProvider,
 } from "@/components/ui/tooltip";
+import { Response } from "@/types/response";
+import { CandidateStatus } from "@/lib/enum";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
-export type TableData = {
-  call_id: string;
-  name: string;
-  overallScore: number;
-  communicationScore: number;
-  callSummary: string;
+export type TableData = Response & {
+  weightedScore: number;
 };
 
 interface DataTableProps {
   data: TableData[];
   interviewId: string;
+  selectedCallId?: string;
+  onRowClick?: (response: TableData) => void;
+  handleCandidateStatusChange?: (callId: string, newStatus: string) => void;
 }
 
-function DataTable({ data, interviewId }: DataTableProps) {
+export function DataTable({ data, interviewId, selectedCallId, onRowClick, handleCandidateStatusChange }: DataTableProps) {
   const [sorting, setSorting] = useState<SortingState>([
-    { id: "overallScore", desc: true },
+    { id: "weightedScore", desc: true },
   ]);
-  const [hoveredRowId, setHoveredRowId] = useState<string | null>(null);
-  const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  const handleMouseEnter = useCallback((rowId: string) => {
-    if (hoverTimeoutRef.current) {
-      clearTimeout(hoverTimeoutRef.current);
-    }
-    hoverTimeoutRef.current = setTimeout(() => {
-      setHoveredRowId(rowId);
-    }, 400);
-  }, []);
-
-  const handleMouseLeave = useCallback(() => {
-    if (hoverTimeoutRef.current) {
-      clearTimeout(hoverTimeoutRef.current);
-    }
-    setHoveredRowId(null);
-  }, []);
 
   const customSortingFn = (a: any, b: any) => {
     if (a === null || a === undefined) {
@@ -86,37 +76,41 @@ function DataTable({ data, interviewId }: DataTableProps) {
           </Button>
         );
       },
-      cell: ({ row }) => (
-        <div className="flex items-center justify-left min-h-[2.6em]">
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="cursor-pointer mr-2 flex-shrink-0">
-                  <ExternalLink
-                    size={16}
-                    className="text-current hover:text-indigo-600"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      window.open(
-                        `/interviews/${interviewId}?call=${row.original.call_id}`,
-                        "_blank",
-                      );
-                    }}
-                  />
-                </span>
-              </TooltipTrigger>
-              <TooltipContent
-                side="top"
-                className="bg-gray-500 text-white font-normal"
-              >
-                View Response
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-          <span className="truncate">{row.getValue("name")}</span>
-        </div>
-      ),
-      sortingFn: (rowA, rowB, columnId) => {
+      cell: ({ row }) => {
+        const name = row.original.name || "Anonymous";
+
+        return (
+          <div className="flex items-center justify-left min-h-[2.6em]">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="cursor-pointer mr-2 flex-shrink-0">
+                    <ExternalLink
+                      size={16}
+                      className="text-current hover:text-indigo-600"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        window.open(
+                          `/interviews/${interviewId}?call=${row.original.call_id}`,
+                          "_blank",
+                        );
+                      }}
+                    />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent
+                  side="top"
+                  className="bg-gray-500 text-white font-normal"
+                >
+                  View Response
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <span className="truncate">{name}</span>
+          </div>
+        );
+      },
+      sortingFn: (rowA: any, rowB: any, columnId: string) => {
         const a = rowA.getValue(columnId) as string;
         const b = rowB.getValue(columnId) as string;
 
@@ -124,7 +118,7 @@ function DataTable({ data, interviewId }: DataTableProps) {
       },
     },
     {
-      accessorKey: "overallScore",
+      accessorKey: "weightedScore",
       header: ({ column }) => {
         return (
           <Button
@@ -137,71 +131,52 @@ function DataTable({ data, interviewId }: DataTableProps) {
           </Button>
         );
       },
-      cell: ({ row }) => (
-        <div className="min-h-[2.6em] flex items-center justify-center">
-          {row.getValue("overallScore") ?? "-"}
+      cell: ({ row }: { row: any }) => (
+        <div className="min-h-[2.6em] flex items-center justify-center font-medium">
+          {row.original.analytics?.overallScore ?? "-"}
         </div>
       ),
-      sortingFn: (rowA, rowB, columnId) => {
-        const a = rowA.getValue(columnId) as number | null;
-        const b = rowB.getValue(columnId) as number | null;
+      sortingFn: (rowA: any, rowB: any, columnId: string) => {
+        const a = rowA.original.weightedScore as number | null;
+        const b = rowB.original.weightedScore as number | null;
+        if (a === null || a === undefined) {
+          return -1;
+        }
+        if (b === null || b === undefined) {
+          return 1;
+        }
 
-        return customSortingFn(a, b);
+        return a - b;
       },
     },
     {
-      accessorKey: "communicationScore",
-      header: ({ column }) => {
-        return (
-          <Button
-            variant="ghost"
-            className={`w-full justify-start font-semibold text-[15px] mb-1 ${column.getIsSorted() ? "text-indigo-600" : "text-black"}`}
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          >
-            Communication Score
-            <ArrowUpDown className="ml-2 h-4 w-4" />
-          </Button>
-        );
-      },
-      cell: ({ row }) => (
-        <div className="min-h-[2.6em] flex items-center justify-center">
-          {row.getValue("communicationScore") ?? "-"}
-        </div>
-      ),
-      sortingFn: (rowA, rowB, columnId) => {
-        const a = rowA.getValue(columnId) as number | null;
-        const b = rowB.getValue(columnId) as number | null;
-
-        return customSortingFn(a, b);
-      },
-    },
-    {
-      accessorKey: "callSummary",
-      header: () => (
-        <div className="w-full justify-start font-semibold text-[15px] mb-1 text-black">
-          Summary
-        </div>
-      ),
+      accessorKey: "candidate_status",
+      header: "Status",
       cell: ({ row }) => {
-        const summary = row.getValue("callSummary") as string;
-
+        if (!handleCandidateStatusChange) {
+          return <div className="min-h-[2.6em] flex items-center justify-center text-xs text-gray-500">{row.original.candidate_status || 'No Status'}</div>;
+        }
+        const currentStatus = row.original.candidate_status || CandidateStatus.NO_STATUS;
         return (
-          <div className="text-xs text-justify pr-4">
-            <div
-              className={`
-                overflow-hidden transition-all duration-300 ease-in-out
-                ${
-                  hoveredRowId === row.id
-                    ? "max-h-[1000px] opacity-100"
-                    : "max-h-[2.6em] line-clamp-2 opacity-90"
-                }
-              `}
+          <div className="min-h-[2.6em] flex items-center justify-center">
+            <Select
+              value={currentStatus}
+              onValueChange={(newStatus) => handleCandidateStatusChange(row.original.call_id, newStatus)}
             >
-              {summary}
-            </div>
+              <SelectTrigger className="w-[110px] text-xs h-8">
+                <SelectValue placeholder="Set Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={CandidateStatus.NO_STATUS}>No Status</SelectItem>
+                <SelectItem value={CandidateStatus.NOT_SELECTED}>Rejected</SelectItem>
+                <SelectItem value={CandidateStatus.POTENTIAL}>Potential</SelectItem>
+                <SelectItem value={CandidateStatus.SELECTED}>Approved</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         );
       },
+      enableSorting: false,
     },
   ];
 
@@ -239,8 +214,9 @@ function DataTable({ data, interviewId }: DataTableProps) {
           {table.getRowModel().rows.map((row) => (
             <TableRow
               key={row.id}
-              onMouseEnter={() => handleMouseEnter(row.id)}
-              onMouseLeave={handleMouseLeave}
+              data-state={row.original.call_id === selectedCallId ? "selected" : undefined}
+              className={onRowClick ? "cursor-pointer" : ""}
+              onClick={onRowClick ? () => onRowClick(row.original) : undefined}
             >
               {row.getVisibleCells().map((cell) => (
                 <TableCell
@@ -257,5 +233,3 @@ function DataTable({ data, interviewId }: DataTableProps) {
     </div>
   );
 }
-
-export default DataTable;

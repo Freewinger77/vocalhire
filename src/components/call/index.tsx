@@ -325,6 +325,7 @@ function Call({ interview }: InterviewProps) {
       objective: interview?.objective,
       questions: interview?.questions.map((q) => q.question).join(", "),
       name: userName || "not provided",
+      job_context: interview?.job_context || "No specific job context provided.",
     };
 
     // Set loading state

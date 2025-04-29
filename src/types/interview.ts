@@ -21,6 +21,7 @@ export interface InterviewBase {
   questions: Question[];
   description: string;
   response_count: bigint;
+  job_context?: string;
 }
 
 export interface InterviewDetails {

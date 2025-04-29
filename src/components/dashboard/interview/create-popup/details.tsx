@@ -55,6 +55,7 @@ function DetailsPopup({
   );
   const [duration, setDuration] = useState(interviewData.time_duration);
   const [uploadedDocumentContext, setUploadedDocumentContext] = useState("");
+  const [jobContext, setJobContext] = useState(interviewData.job_context || "");
 
   const slideLeft = (id: string, value: number) => {
     var slider = document.getElementById(`${id}`);
@@ -107,6 +108,7 @@ function DetailsPopup({
       time_duration: duration,
       description: generatedQuestionsResponse.description,
       is_anonymous: isAnonymous,
+      job_context: jobContext.trim(),
     };
     setInterviewData(updatedInterviewData);
   };
@@ -124,6 +126,7 @@ function DetailsPopup({
       time_duration: String(duration),
       description: "",
       is_anonymous: isAnonymous,
+      job_context: jobContext.trim(),
     };
     setInterviewData(updatedInterviewData);
   };
@@ -137,6 +140,7 @@ function DetailsPopup({
       setNumQuestions("");
       setDuration("");
       setIsClicked(false);
+      setJobContext("");
     }
   }, [open]);
 
@@ -223,6 +227,14 @@ function DetailsPopup({
             placeholder="e.g. Find best candidates based on their technical skills and previous projects."
             onChange={(e) => setObjective(e.target.value)}
             onBlur={(e) => setObjective(e.target.value.trim())}
+          />
+          <h3 className="text-sm font-medium mt-2">Job Context:</h3>
+          <Textarea
+            value={jobContext}
+            className="h-24 mt-2 border-2 border-gray-500 w-[33.2rem]"
+            placeholder="e.g. Describe the role, required skills, company culture, etc."
+            onChange={(e) => setJobContext(e.target.value)}
+            onBlur={(e) => setJobContext(e.target.value.trim())}
           />
           <h3 className="text-sm font-medium mt-2">
             Upload any documents related to the interview.

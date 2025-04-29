@@ -46,6 +46,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { InterviewerService } from "@/services/interviewers.service";
 import { cn } from "@/lib/utils";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { v4 as uuidv4 } from 'uuid';
 
 const webClient = new RetellWebClient();
 
@@ -83,6 +85,7 @@ function Call({ interview }: InterviewProps) {
   const [isValidEmail, setIsValidEmail] = useState<boolean>(false);
   const [isOldUser, setIsOldUser] = useState<boolean>(false);
   const [callId, setCallId] = useState<string>("");
+  const [cvFile, setCvFile] = useState<File | null>(null);
   const { tabSwitchCount } = useTabSwitchPrevention();
   const [isFeedbackSubmitted, setIsFeedbackSubmitted] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -291,99 +294,145 @@ function Call({ interview }: InterviewProps) {
     if (!startFunctionArgs) {
       console.error("executeStartConversation called without args");
 
-      return; // Added newline before return
+      return; // Added newline
     }
     const { practiceMode } = startFunctionArgs;
     setStartFunctionArgs(null); // Clear args immediately
 
     console.log(`Executing start conversation (practice: ${practiceMode})`);
 
-    // --- Start of original startConversation logic ---
     const userEmail = practiceMode && interview?.is_anonymous ? "practice@example.com" : email;
     const userName = practiceMode && interview?.is_anonymous ? "Practice User" : name;
 
-    if (!practiceMode) {
-      console.log("[startConversation] Checking for existing responses...");
-      const oldUserEmails: string[] = (
-        await ResponseService.getAllEmails(interview.id)
-      ).map((item) => item.email);
-      const isActuallyOldUser =
-        oldUserEmails.includes(userEmail) ||
-        (interview?.respondents && !interview?.respondents.includes(userEmail));
-
-      if (isActuallyOldUser) {
-        console.log("[startConversation] User already responded or not permitted.");
-        setIsOldUser(true);
-
-        return; // Added newline before return
-      }
-      console.log("[startConversation] No existing response found.");
-    }
-
-    const data = {
-      mins: practiceMode ? "2" : interview?.time_duration,
-      objective: interview?.objective,
-      questions: interview?.questions.map((q) => q.question).join(", "),
-      name: userName || "not provided",
-      job_context: interview?.job_context || "No specific job context provided.",
-    };
-
-    // Set loading state
+    // Set loading state early
     if (practiceMode) { setIsLoadingPractice(true); } else { setIsLoadingInterview(true); }
     setIsPracticing(practiceMode);
 
     try {
-      console.log("[startConversation] Calling /api/register-call...");
+      // --- Pre-call checks (only for real interviews) ---
+      if (!practiceMode) {
+        console.log("[executeStartConversation] Checking for existing responses...");
+        const oldUserEmails: string[] = (
+          await ResponseService.getAllEmails(interview.id)
+        ).map((item) => item.email);
+        const isActuallyOldUser =
+          oldUserEmails.includes(userEmail) ||
+          (interview?.respondents && !interview?.respondents.includes(userEmail));
+
+        if (isActuallyOldUser) {
+          console.log("[executeStartConversation] User already responded or not permitted.");
+          setIsOldUser(true);
+          toast.error("You have already responded to this interview or are not permitted.");
+          setIsPracticing(false); // Reset practice state
+          if (practiceMode) { setIsLoadingPractice(false); } else { setIsLoadingInterview(false); }
+
+          return; // Added newline
+        }
+        console.log("[executeStartConversation] No existing response found.");
+      }
+
+      // --- CV Upload Logic ---
+      let cvUrl: string | null = null;
+      if (cvFile && !practiceMode) { // Only upload if file exists and it's not practice mode
+        console.log("[executeStartConversation] Uploading CV...");
+        const supabase = createClientComponentClient(); // Create client instance
+        const fileExt = cvFile.name.split('.').pop();
+        const uniqueFileName = `${uuidv4()}.${fileExt}`;
+        const filePath = `${interview.id}/${uniqueFileName}`; // Store under interview ID folder
+
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('cvs') // Target 'cvs' bucket
+          .upload(filePath, cvFile);
+
+        if (uploadError) {
+          console.error("[executeStartConversation] CV Upload Error:", uploadError);
+          toast.error("Failed to upload CV. Please try again or continue without it.");
+          // Decide if you want to stop the process or continue without CV
+          // For now, we'll let it continue without the CV
+          // throw new Error("CV upload failed"); // Alternatively, stop the process
+        } else {
+          console.log("[executeStartConversation] CV Upload successful:", uploadData);
+          // Get public URL
+          const { data: publicUrlData } = supabase.storage
+            .from('cvs')
+            .getPublicUrl(filePath);
+
+          if (publicUrlData?.publicUrl) {
+            cvUrl = publicUrlData.publicUrl;
+            console.log("[executeStartConversation] CV Public URL:", cvUrl);
+          } else {
+            console.warn("[executeStartConversation] Could not get public URL for CV.");
+            // Handle case where URL retrieval fails but upload succeeded (optional)
+          }
+        }
+      } else if (cvFile && practiceMode) {
+        console.log("[executeStartConversation] Practice mode: Skipping CV upload.");
+      }
+
+      // --- Prepare data for Retell API ---
+      const data = {
+        mins: practiceMode ? "2" : interview?.time_duration,
+        objective: interview?.objective,
+        questions: interview?.questions.map((q) => q.question).join(", "),
+        name: userName || "not provided",
+        job_context: interview?.job_context || "No specific job context provided.",
+      };
+
+      console.log("[executeStartConversation] Calling /api/register-call...");
       const registerCallResponse: registerCallResponseType = await axios.post(
         "/api/register-call",
         {
           dynamic_data: data,
           interviewer_id: interview?.interviewer_id,
           is_practice: practiceMode,
-        },
+        }
       );
-      console.log("[startConversation] API response received:", registerCallResponse.data);
+      console.log("[executeStartConversation] API response received:", registerCallResponse.data);
 
       if (registerCallResponse.data.registerCallResponse.access_token) {
         const currentCallId = registerCallResponse?.data?.registerCallResponse?.call_id;
-        console.log(`[startConversation] Got access token. Call ID: ${currentCallId}`);
+        console.log(`[executeStartConversation] Got access token. Call ID: ${currentCallId}`);
         setCallId(currentCallId);
 
+        // --- Create Database Record (Real Interviews Only) ---
         if (!practiceMode) {
-          console.log("[startConversation] Creating DB record...");
+          console.log("[executeStartConversation] Creating DB record with CV URL:", cvUrl);
           await createResponse({
             interview_id: interview.id,
             call_id: currentCallId,
             email: userEmail,
             name: userName,
+            cv_url: cvUrl, // <-- Pass the CV URL here
           });
-           console.log("[startConversation] DB record created.");
+          console.log("[executeStartConversation] DB record created.");
         } else {
-           console.log("[startConversation] Practice mode: Skipping DB record creation.");
-           setPracticeTimeLeft(120);
+          console.log("[executeStartConversation] Practice mode: Skipping DB record creation.");
+          setPracticeTimeLeft(120); // Reset practice timer
         }
 
-        console.log("[startConversation] Starting Retell web client call...");
+        // --- Start Retell Call ---
+        console.log("[executeStartConversation] Starting Retell web client call...");
         await webClient.startCall({
           accessToken: registerCallResponse.data.registerCallResponse.access_token,
         });
-        console.log("[startConversation] Retell call initiated. Setting isStarted = true");
+        console.log("[executeStartConversation] Retell call initiated. Setting isStarted = true");
         setIsStarted(true);
-        // NOTE: Do NOT set setShowUnmuteInstruction(true) here anymore
+
       } else {
-        console.error("[startConversation] Failed to register call - API response missing access token.");
+        console.error("[executeStartConversation] Failed to register call - API response missing access token.");
         toast.error("Could not initiate the call. Please try again.");
         setIsPracticing(false); // Reset practice state
       }
     } catch (error) {
-        console.error("[startConversation] Error caught:", error);
-        toast.error("An error occurred while starting the call.");
+        console.error("[executeStartConversation] Error caught:", error);
+        // Display a more specific error if it's a known type, otherwise generic
+        const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred.";
+        toast.error(`Error starting call: ${errorMessage}`);
         setIsPracticing(false); // Reset practice state
     } finally {
-        // Reset loading state
+        // Reset loading state regardless of success or failure
         if (practiceMode) { setIsLoadingPractice(false); } else { setIsLoadingInterview(false); }
     }
-    // --- End of original startConversation logic ---
   };
 
   // --- Part 1: Prepare to start (called by buttons) ---
@@ -524,9 +573,21 @@ function Call({ interview }: InterviewProps) {
   }, []); // Empty dependency array ensures this runs only once on mount
   // --- End Mic Permission Logic ---
 
-  // --- Renamed: Original startConversation removed/refactored --- 
-
-  // ... other handlers and useEffects ...
+  // --- Helper for file input change ---
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file && file.type === "application/pdf") {
+      setCvFile(file);
+    } else if (file) {
+      // Optional: Provide feedback if the file is not a PDF
+      toast.error("Please upload a PDF file.");
+      setCvFile(null); // Clear selection if not PDF
+      event.target.value = ""; // Reset file input
+    } else {
+      setCvFile(null); // Clear state if no file selected
+    }
+  };
+  // --- End Helper ---
 
   return (
     <div className="flex justify-center items-center min-h-screen bg-gray-100">
@@ -677,6 +738,27 @@ function Call({ interview }: InterviewProps) {
                           onChange={(e) => setEmail(e.target.value)}
                         />
                       </div>
+
+                      {/* CV Upload Input (Reverted to simple) */}
+                      <div className="flex justify-center">
+                        <div className="w-[75%]">
+                          <label htmlFor="cv-upload" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 text-center">
+                             Upload CV (Optional, PDF only)
+                          </label>
+                          <input
+                            id="cv-upload"
+                            type="file"
+                            accept=".pdf"
+                            className="w-full text-sm text-gray-500 dark:text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 dark:file:bg-indigo-900 file:text-indigo-700 dark:file:text-indigo-300 hover:file:bg-indigo-100 dark:hover:file:bg-indigo-800 cursor-pointer border border-gray-300 dark:border-gray-600"
+                            aria-label="Upload CV (Optional, PDF only)"
+                            onChange={handleFileChange}
+                          />
+                          {cvFile && (
+                              <p className="text-green-600 dark:text-green-400 text-xs mt-1 text-center">Selected: {cvFile.name}</p>
+                          )}
+                         </div>
+                      </div>
+
                     </div>
                   )}
                 </div>
@@ -977,7 +1059,7 @@ function Call({ interview }: InterviewProps) {
          {/* Footer - Ensure correct syntax */}
          <a
           className="flex flex-row justify-center align-middle mt-3"
-          href="https://Vocal-up.co/"
+          href="https://vocalhire.xyz/"
           target="_blank"
           rel="noopener noreferrer"
         >

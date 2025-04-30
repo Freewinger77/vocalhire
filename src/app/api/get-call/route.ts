@@ -9,7 +9,7 @@ const retell = new Retell({
   apiKey: process.env.RETELL_API_KEY || "",
 });
 
-export const maxDuration = 300;
+export const maxDuration = 59;
 
 export async function POST(req: Request, res: Response) {
   logger.info("get-call request received");
